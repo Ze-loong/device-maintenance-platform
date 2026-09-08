@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}预测调试 - 设备预测性维护平台{% endblock %}
+{% block content %}
+<h1>预测调试</h1>
+<p class="hint">本页面手工构造的事件会调用与 MQTT 上报完全相同的 event_service.handle_event()，
+不是另外写的一套模拟逻辑——这是 FR-11 的硬性要求，也是验证 D2-D3 分层设计是否真正复用成功的直接手段。</p>
+<div id="error-box" class="error-box" style="display:none;"></div>
+
+<div class="panel">
+    <form id="debug-form">
+        <div class="form-row">
+            <label>产线</label><select id="debug-line" required></select>
+            <label>设备</label><select id="debug-device" required></select>
+            <label>事件类型</label>
+            <select id="debug-event-type" required>
+                <option value="fan_started">风机启动</option>
+                <option value="fan_stopped">风机停机</option>
+                <option value="sensor_reading">振动/温度周期读数</option>
+                <option value="vibration_alert">振动阈值超限</option>
+                <option value="temperature_alert">温度阈值超限</option>
+            </select>
+        </div>
+        <div class="form-row">
+            <label>数值</label><input type="number" id="debug-value" step="any" value="1" required>
+            <label>发生时间</label><input type="datetime-local" id="debug-occurred-at">
+            <span class="hint">留空则使用当前时间（建议留空，避免与历史事件时间戳重复触发 QoS1 去重）</span>
+        </div>
+        <div class="form-row">
+            <button type="submit" class="primary">提交并查看预测</button>
+        </div>
+    </form>
+</div>
+
+<div class="panel" id="result-panel" style="display:none;">
+    <h1 style="font-size:14px;">预测结果</h1>
+    <div id="duplicate-hint" class="hint" style="display:none;color:#c53030;">
+        这条事件与已有记录时间戳重复（QoS1 去重机制拦截），未触发新的推理——请调整"发生时间"后重试。
+    </div>
+    <div id="prediction-content"></div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+    let devicesByLine = {};
+
+    async function loadLines() {
+        const data = await apiFetch("/api/lines?page=1&page_size=200");
+        const select = document.getElementById("debug-line");
+        select.innerHTML = data.items.map(f => `<option value="${f.line_code}" data-id="${f.id}">${f.line_code} - ${f.name}</option>`).join("");
+        await loadDevicesForSelectedLine();
+    }
+
+    async function loadDevicesForSelectedLine() {
+        const lineSelect = document.getElementById("debug-line");
+        const selectedOption = lineSelect.options[lineSelect.selectedIndex];
+        if (!selectedOption) { return; }
+        const lineId = selectedOption.dataset.id;
+        const data = await apiFetch(`/api/devices?page=1&page_size=100&line_id=${lineId}`);
+        const deviceSelect = document.getElementById("debug-device");
+        deviceSelect.innerHTML = data.items.map(d => `<option value="${d.device_code}" data-type="${d.device_type}" data-location="${d.location}">${d.device_code}（${d.location}）</option>`).join("");
+    }
+
+    document.getElementById("debug-line").addEventListener("change", loadDevicesForSelectedLine);
+
+    document.getElementById("debug-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const errorBox = document.getElementById("error-box");
+        showError(errorBox, "");
+        const lineSelect = document.getElementById("debug-line");
+        const deviceSelect = document.getElementById("debug-device");
+        const deviceOption = deviceSelect.options[deviceSelect.selectedIndex];
+        if (!deviceOption) {
+            showError(errorBox, "该产线暂无可用设备，请先在设备管理页面添加设备。");
+            return;
+        }
+        const occurredAtInput = document.getElementById("debug-occurred-at").value;
+        // UplinkEvent.occurred_at 要求带时区；留空则用当前时间，前端直接生成 ISO 字符串即可，
+        // 与 MQTT 上行事件的字段要求完全一致（这里复用的是同一个 Pydantic 模型）。
+        const occurredAt = occurredAtInput ? new Date(occurredAtInput).toISOString() : new Date().toISOString();
+        const payload = {
+            line_id: lineSelect.value,
+            device_id: deviceOption.value,
+            device_type: deviceOption.dataset.type,
+            location: deviceOption.dataset.location,
+            event_type: document.getElementById("debug-event-type").value,
+            value: parseFloat(document.getElementById("debug-value").value),
+            extra: {},
+            occurred_at: occurredAt,
+            is_backfill: false,
+        };
+        try {
+            const result = await apiFetch("/api/debug/predict", { method: "POST", body: JSON.stringify(payload) });
+            document.getElementById("result-panel").style.display = "block";
+            const duplicateHint = document.getElementById("duplicate-hint");
+            const content = document.getElementById("prediction-content");
+            if (result.is_duplicate) {
+                duplicateHint.style.display = "block";
+                content.innerHTML = "";
+                return;
+            }
+            duplicateHint.style.display = "none";
+            const p = result.prediction;
+            let html = `<p><strong>下一步行为预测：</strong>${p.next_behavior}</p>`;
+            html += `<p><strong>置信度：</strong>${confidenceBadge(p.confidence, result.is_degraded)}</p>`;
+            html += `<p><strong>推理依据：</strong>${p.reasoning}</p>`;
+            if (result.matched_segments.length > 0) {
+                html += `<p><strong>命中画像分段：</strong></p>`;
+                for (const seg of result.matched_segments) {
+                    html += `<div class="panel" style="box-shadow:none;border:1px solid #edf2f7;">
+                        <strong>${seg.dimension}</strong>（${seg.segment_date}）
+                        <p>${seg.content}</p>
+                    </div>`;
+                }
+            } else {
+                html += `<p class="hint">本次未命中任何历史画像分段。</p>`;
+            }
+            content.innerHTML = html;
+        } catch (e) {
+            showError(errorBox, e.message);
+        }
+    });
+
+    loadLines();
+</script>
+{% endblock %}

@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}设备管理 - 设备预测性维护平台{% endblock %}
+{% block content %}
+<h1>设备管理</h1>
+<div id="error-box" class="error-box" style="display:none;"></div>
+
+<div class="panel">
+    <div class="form-row"><strong id="form-title">新增设备</strong></div>
+    <form id="device-form">
+        <input type="hidden" id="device-id">
+        <div class="form-row">
+            <label>设备编号</label><input type="text" id="device-code" placeholder="如 L001-KITCHEN-PRESENCE" required>
+            <label>归属产线</label><select id="device-line" required></select>
+            <label>设备类型</label><select id="device-type" required></select>
+            <label>安装位置</label><select id="device-location" required></select>
+        </div>
+        <div class="form-row">
+            <label>展示名称</label><input type="text" id="device-name" style="flex:1;">
+            <button type="submit" class="primary">保存</button>
+            <button type="button" class="secondary" id="cancel-edit" style="display:none;">取消编辑</button>
+        </div>
+    </form>
+    <div class="hint">设备编号与归属产线创建后不可修改（网关侧上报事件时依赖这两个值）。</div>
+</div>
+
+<div class="panel">
+    <div class="form-row">
+        <label>按产线过滤</label>
+        <select id="filter-line"><option value="">全部产线</option></select>
+        <button class="secondary" onclick="loadDevices(1)">查询</button>
+    </div>
+    <table>
+        <thead><tr><th>编号</th><th>归属产线</th><th>类型</th><th>位置</th><th>名称</th><th>在线状态</th><th>操作</th></tr></thead>
+        <tbody id="device-table-body"></tbody>
+    </table>
+    <div class="pagination" id="pagination"></div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+    let currentPage = 1;
+    const pageSize = 20;
+    let lineMap = {};   // id -> line_code，列表展示时把 line_id 还原成可读编号
+    let baseData = { device_types: [], locations: [] };
+
+    async function loadLineOptions() {
+        const data = await apiFetch("/api/lines?page=1&page_size=200");
+        lineMap = {};
+        const createSelect = document.getElementById("device-line");
+        const filterSelect = document.getElementById("filter-line");
+        createSelect.innerHTML = "";
+        for (const f of data.items) {
+            lineMap[f.id] = f.line_code;
+            createSelect.innerHTML += `<option value="${f.id}">${f.line_code} - ${f.name}</option>`;
+            filterSelect.innerHTML += `<option value="${f.id}">${f.line_code} - ${f.name}</option>`;
+        }
+    }
+
+    async function loadBaseData() {
+        baseData = await apiFetch("/api/base-data");
+        const typeSelect = document.getElementById("device-type");
+        const locationSelect = document.getElementById("device-location");
+        typeSelect.innerHTML = baseData.device_types.map(t => `<option value="${t.code}">${t.name}</option>`).join("");
+        locationSelect.innerHTML = baseData.locations.map(l => `<option value="${l.code}">${l.name}</option>`).join("");
+    }
+
+    function locationName(code) {
+        const found = baseData.locations.find(l => l.code === code);
+        return found ? found.name : code;
+    }
+    function typeName(code) {
+        const found = baseData.device_types.find(t => t.code === code);
+        return found ? found.name : code;
+    }
+
+    async function loadDevices(page = 1) {
+        currentPage = page;
+        const errorBox = document.getElementById("error-box");
+        showError(errorBox, "");
+        try {
+            const lineId = document.getElementById("filter-line").value;
+            let url = `/api/devices?page=${page}&page_size=${pageSize}`;
+            if (lineId) { url += `&line_id=${lineId}`; }
+            const data = await apiFetch(url);
+            const tbody = document.getElementById("device-table-body");
+            tbody.innerHTML = "";
+            for (const d of data.items) {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${d.device_code}</td>
+                    <td>${lineMap[d.line_id] || d.line_id}</td>
+                    <td>${typeName(d.device_type)}</td>
+                    <td>${locationName(d.location)}</td>
+                    <td>${d.name || ""}</td>
+                    <td>${d.online_status ? "在线" : "离线"}</td>
+                    <td>
+                        <button class="secondary" onclick='editDevice(${JSON.stringify(d)})'>编辑</button>
+                        <button class="danger" onclick="deleteDevice(${d.id}, '${d.device_code}')">删除</button>
+                    </td>`;
+                tbody.appendChild(tr);
+            }
+            renderPagination(document.getElementById("pagination"), data, loadDevices);
+        } catch (e) {
+            showError(errorBox, e.message);
+        }
+    }
+
+    function editDevice(d) {
+        document.getElementById("form-title").textContent = `编辑设备：${d.device_code}`;
+        document.getElementById("device-id").value = d.id;
+        document.getElementById("device-code").value = d.device_code;
+        document.getElementById("device-code").disabled = true;
+        document.getElementById("device-line").value = d.line_id;
+        document.getElementById("device-line").disabled = true;
+        document.getElementById("device-type").value = d.device_type;
+        document.getElementById("device-location").value = d.location;
+        document.getElementById("device-name").value = d.name || "";
+        document.getElementById("cancel-edit").style.display = "inline-block";
+    }
+
+    function resetForm() {
+        document.getElementById("form-title").textContent = "新增设备";
+        document.getElementById("device-form").reset();
+        document.getElementById("device-id").value = "";
+        document.getElementById("device-code").disabled = false;
+        document.getElementById("device-line").disabled = false;
+        document.getElementById("cancel-edit").style.display = "none";
+    }
+
+    document.getElementById("cancel-edit").addEventListener("click", resetForm);
+
+    document.getElementById("device-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const errorBox = document.getElementById("error-box");
+        showError(errorBox, "");
+        const id = document.getElementById("device-id").value;
+        const payload = {
+            device_type: document.getElementById("device-type").value,
+            location: document.getElementById("device-location").value,
+            name: document.getElementById("device-name").value || null,
+        };
+        try {
+            if (id) {
+                await apiFetch(`/api/devices/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+            } else {
+                payload.device_code = document.getElementById("device-code").value;
+                payload.line_id = parseInt(document.getElementById("device-line").value, 10);
+                await apiFetch("/api/devices", { method: "POST", body: JSON.stringify(payload) });
+            }
+            resetForm();
+            loadDevices(currentPage);
+        } catch (e) {
+            showError(errorBox, e.message);
+        }
+    });
+
+    async function deleteDevice(id, code) {
+        if (!window.confirm(`确认删除设备 ${code}？（软删除，历史事件不受影响）`)) { return; }
+        const errorBox = document.getElementById("error-box");
+        try {
+            await apiFetch(`/api/devices/${id}`, { method: "DELETE" });
+            loadDevices(currentPage);
+        } catch (e) {
+            showError(errorBox, e.message);
+        }
+    }
+
+    (async function init() {
+        await Promise.all([loadLineOptions(), loadBaseData()]);
+        loadDevices();
+    })();
+</script>
+{% endblock %}

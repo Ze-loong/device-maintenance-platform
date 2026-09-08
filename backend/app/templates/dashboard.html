@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}仪表盘 - 设备预测性维护平台{% endblock %}
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+{% endblock %}
+{% block content %}
+<h1>仪表盘</h1>
+<div id="error-box" class="error-box" style="display:none;"></div>
+<div class="card-row" id="stat-cards">
+    <div class="stat-card"><div class="label">产线数</div><div class="value" id="stat-line">--</div></div>
+    <div class="stat-card"><div class="label">设备总数</div><div class="value" id="stat-device">--</div></div>
+    <div class="stat-card"><div class="label">在线设备数</div><div class="value" id="stat-online">--</div><div class="hint">FR-13未实现，恒为0</div></div>
+    <div class="stat-card"><div class="label">事件总数</div><div class="value" id="stat-event">--</div></div>
+    <div class="stat-card"><div class="label">画像总数</div><div class="value" id="stat-profile">--</div></div>
+    <div class="stat-card"><div class="label">近24小时事件数</div><div class="value" id="stat-recent">--</div></div>
+</div>
+<div class="panel">
+    <h1 style="font-size:14px;">近24小时事件时序（按北京时间小时统计）</h1>
+    <canvas id="hourly-chart" height="90"></canvas>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+    let chart = null;
+
+    function drawFallbackChart(ctx, values) {
+        // 演示环境无法访问 CDN 时仍画出可用折线，避免仪表盘只剩空白画布。
+        const canvas = ctx.canvas;
+        const width = canvas.clientWidth || 900;
+        const height = 260;
+        canvas.width = width;
+        canvas.height = height;
+        ctx.clearRect(0, 0, width, height);
+        ctx.strokeStyle = "#cbd5e0";
+        ctx.beginPath(); ctx.moveTo(40, 15); ctx.lineTo(40, height - 30); ctx.lineTo(width - 10, height - 30); ctx.stroke();
+        const maxValue = Math.max(1, ...values);
+        ctx.strokeStyle = "#2b6cb0";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        values.forEach((value, index) => {
+            const x = 40 + index * (width - 55) / Math.max(1, values.length - 1);
+            const y = height - 30 - value * (height - 55) / maxValue;
+            if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        canvas.setAttribute("aria-label", `近24小时事件折线图，共${values.reduce((sum, item) => sum + item, 0)}条事件`);
+    }
+
+    async function loadDashboard() {
+        const errorBox = document.getElementById("error-box");
+        showError(errorBox, "");
+        try {
+            const data = await apiFetch("/api/dashboard");
+            document.getElementById("stat-line").textContent = data.stats.line_count;
+            document.getElementById("stat-device").textContent = data.stats.device_count;
+            document.getElementById("stat-online").textContent = data.stats.online_device_count;
+            document.getElementById("stat-event").textContent = data.stats.event_count;
+            document.getElementById("stat-profile").textContent = data.stats.profile_count;
+            document.getElementById("stat-recent").textContent = data.stats.recent_24h_event_count;
+
+            const labels = data.hourly_events.map(p => p.hour);
+            const values = data.hourly_events.map(p => p.event_count);
+            const ctx = document.getElementById("hourly-chart").getContext("2d");
+            if (typeof Chart === "undefined") {
+                drawFallbackChart(ctx, values);
+            } else {
+                if (chart) { chart.destroy(); }
+                chart = new Chart(ctx, {
+                    type: "line",
+                    data: { labels, datasets: [{ label: "事件数", data: values, borderColor: "#2b6cb0", backgroundColor: "rgba(43,108,176,0.1)", tension: 0.2, fill: true }] },
+                    options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+                });
+            }
+        } catch (e) {
+            showError(errorBox, e.message);
+        }
+    }
+
+    loadDashboard();
+    // 每 60 秒自动刷新一次，仪表盘作为"看板"场景不需要手动刷新按钮。
+    setInterval(loadDashboard, 60000);
+</script>
+{% endblock %}

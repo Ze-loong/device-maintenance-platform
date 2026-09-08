@@ -1,0 +1,74 @@
+/* 管理端全局样式：功能优先，不追求视觉复杂度。 */
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    font-family: "Microsoft YaHei", "PingFang SC", -apple-system, sans-serif;
+    background: #f4f6f8;
+    color: #1f2933;
+}
+.layout { display: flex; min-height: 100vh; }
+.sidebar {
+    width: 200px;
+    background: #1f2d3d;
+    color: #cbd5e0;
+    padding: 16px 0;
+    flex-shrink: 0;
+}
+.sidebar .brand { padding: 0 20px 16px; font-size: 15px; font-weight: bold; color: #fff; border-bottom: 1px solid #2d3b4f; margin-bottom: 8px; }
+.sidebar a {
+    display: block;
+    padding: 10px 20px;
+    color: #cbd5e0;
+    text-decoration: none;
+    font-size: 14px;
+}
+.sidebar a:hover, .sidebar a.active { background: #2d3b4f; color: #fff; }
+.main { flex: 1; display: flex; flex-direction: column; }
+.topbar {
+    height: 52px;
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 20px;
+    gap: 12px;
+    font-size: 13px;
+}
+.topbar button { background: none; border: 1px solid #cbd5e0; border-radius: 4px; padding: 4px 12px; cursor: pointer; }
+.content { padding: 20px; flex: 1; }
+h1 { font-size: 18px; margin: 0 0 16px; }
+.card-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.stat-card {
+    background: #fff;
+    border-radius: 6px;
+    padding: 16px 20px;
+    min-width: 150px;
+    flex: 1;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+.stat-card .label { font-size: 12px; color: #718096; margin-bottom: 6px; }
+.stat-card .value { font-size: 24px; font-weight: bold; color: #1f2933; }
+.panel { background: #fff; border-radius: 6px; padding: 16px 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); margin-bottom: 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #edf2f7; }
+th { color: #718096; font-weight: 600; background: #f9fafb; }
+.form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.form-row label { font-size: 13px; color: #4a5568; margin-right: 4px; }
+input, select, textarea {
+    padding: 6px 8px;
+    border: 1px solid #cbd5e0;
+    border-radius: 4px;
+    font-size: 13px;
+}
+button.primary { background: #2b6cb0; color: #fff; border: none; border-radius: 4px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+button.danger { background: #c53030; color: #fff; border: none; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+button.secondary { background: #edf2f7; border: 1px solid #cbd5e0; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+.badge-low { background: #fed7d7; color: #822727; }
+.badge-medium { background: #feebc8; color: #7b341e; }
+.badge-high { background: #c6f6d5; color: #22543d; }
+.badge-degraded { background: #e2e8f0; color: #4a5568; margin-left: 6px; }
+.pagination { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 13px; }
+.error-box { background: #fff5f5; color: #c53030; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; font-size: 13px; }
+.hint { color: #a0aec0; font-size: 12px; }

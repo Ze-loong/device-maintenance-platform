@@ -1,0 +1,36 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+deploy/emqx/auth-users.csv
+.pytest_cache/
+backend/.pytest_tmp_d6/
+
+# 验收阶段临时用的独立 Docker 环境配置，非正式部署配置，不进仓库。
+deploy/docker-compose.acceptance.yml
+backend/logs/
+backend/data/raw/*
+!backend/data/raw/.gitkeep
+*.log
+.idea/
+.vscode/
+
+# Cowork 桥接环境清理残留（本机可直接手动删除）
+_to_delete/
+
+# 内部开发过程记录：任务书、执行记录、devlog——不公开，只留本机作为自己的开发史料/面试准备素材。
+任务清单.md
+实战记录.md
+协作记录/
+
+# 简历文案草稿——不是项目设计文档，属于求职素材，不进代码仓库。
+设计文档/00-简历项目经历终稿.md
+设计文档/00-简历项目经历换皮版.md
+
+# 沿用自姊妹项目的旧设计文档，内容仍是原场景语境，未针对本项目改写，暂不进仓库。
+设计文档/01-需求与概要设计.md
+设计文档/02-MQTT主题规范与数据库设计.md
+设计文档/03-提示词与置信度设计.md
+设计文档/04-部署运维手册.md
+设计文档/05-项目复盘与面试问答.md
+设计文档/images/

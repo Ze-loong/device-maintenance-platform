@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}画像查看 - 设备预测性维护平台{% endblock %}
+{% block content %}
+<h1>画像查看</h1>
+<div id="error-box" class="error-box" style="display:none;"></div>
+
+<div class="panel">
+    <div class="form-row">
+        <label>产线编号</label><input type="text" id="filter-line-code" placeholder="如 L001（留空查全部）">
+        <button class="secondary" onclick="loadProfiles(1)">查询</button>
+    </div>
+</div>
+
+<div class="panel" id="list-panel">
+    <table>
+        <thead><tr><th>ID</th><th>产线</th><th>画像日期</th><th>摘要</th><th>依据事件数</th><th>触发方式</th><th>生成时间</th><th>操作</th></tr></thead>
+        <tbody id="profile-table-body"></tbody>
+    </table>
+    <div class="pagination" id="pagination"></div>
+</div>
+
+<div class="panel" id="detail-panel" style="display:none;">
+    <div class="form-row">
+        <strong id="detail-title"></strong>
+        <button class="secondary" onclick="closeDetail()">返回列表</button>
+    </div>
+    <div id="detail-content"></div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+    let currentPage = 1;
+    const pageSize = 20;
+    const triggerNames = { scheduled: "定时任务", manual: "手动触发" };
+
+    async function loadProfiles(page = 1) {
+        currentPage = page;
+        const errorBox = document.getElementById("error-box");
+        showError(errorBox, "");
+        try {
+            const lineCode = document.getElementById("filter-line-code").value.trim();
+            let url = `/api/profiles?page=${page}&page_size=${pageSize}`;
+            if (lineCode) { url += `&line_code=${encodeURIComponent(lineCode)}`; }
+            const data = await apiFetch(url);
+            const tbody = document.getElementById("profile-table-body");
+            tbody.innerHTML = "";
+            for (const p of data.items) {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${p.id}</td>
+                    <td>${p.line_code}</td>
+                    <td>${p.profile_date}</td>
+                    <td>${p.summary || ""}</td>
+                    <td>${p.source_event_count}</td>
+                    <td>${triggerNames[p.generation_trigger] || p.generation_trigger}</td>
+                    <td>${new Date(p.generated_at).toLocaleString("zh-CN")}</td>
+                    <td><button class="secondary" onclick="viewDetail(${p.id})">查看全文</button></td>`;
+                tbody.appendChild(tr);
+            }
+            renderPagination(document.getElementById("pagination"), data, loadProfiles);
+        } catch (e) {
+            showError(errorBox, e.message);
+        }
+    }
+
+    async function viewDetail(id) {
+        const errorBox = document.getElementById("error-box");
+        showError(errorBox, "");
+        try {
+            const detail = await apiFetch(`/api/profiles/${id}`);
+            document.getElementById("list-panel").style.display = "none";
+            document.getElementById("detail-panel").style.display = "block";
+            document.getElementById("detail-title").textContent = `${detail.line_code} · ${detail.profile_date} 画像全文`;
+            let html = `<p><strong>摘要：</strong>${detail.summary || "（无）"}</p>`;
+            html += `<p><strong>依据事件数：</strong>${detail.source_event_count}　<strong>生成方式：</strong>${triggerNames[detail.generation_trigger] || detail.generation_trigger}</p>`;
+            for (const seg of detail.segments) {
+                html += `<div class="panel" style="box-shadow:none;border:1px solid #edf2f7;">
+                    <strong>${seg.dimension}</strong>
+                    <p>${seg.content}</p>
+                    ${seg.time_windows ? `<pre class="hint">${JSON.stringify(seg.time_windows, null, 2)}</pre>` : ""}
+                </div>`;
+            }
+            document.getElementById("detail-content").innerHTML = html;
+        } catch (e) {
+            showError(errorBox, e.message);
+        }
+    }
+
+    function closeDetail() {
+        document.getElementById("detail-panel").style.display = "none";
+        document.getElementById("list-panel").style.display = "block";
+    }
+
+    loadProfiles();
+</script>
+{% endblock %}
