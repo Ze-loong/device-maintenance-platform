@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}事件日志 - 设备预测性维护平台{% endblock %}
+{% block content %}
+<h1>事件日志</h1>
+<div id="error-box" class="error-box" style="display:none;"></div>
+
+<div class="panel">
+    <div class="form-row">
+        <label>产线编号</label><input type="text" id="filter-line-code" placeholder="如 L001">
+        <label>设备编号</label><input type="text" id="filter-device-code" placeholder="如 L001-KITCHEN-PRESENCE">
+        <label>开始时间</label><input type="datetime-local" id="filter-start">
+        <label>结束时间</label><input type="datetime-local" id="filter-end">
+        <button class="secondary" onclick="loadEvents(1)">查询</button>
+        <button class="secondary" onclick="resetFilter()">重置</button>
+    </div>
+    <div class="hint">时间过滤按事件发生时刻（occurred_at）而不是平台接收时刻；输入框按本机时区理解，查询前会转换为 UTC。</div>
+</div>
+
+<div class="panel">
+    <table>
+        <thead><tr><th>ID</th><th>产线</th><th>设备</th><th>事件类型</th><th>数值</th><th>发生时间</th><th>是否回填</th></tr></thead>
+        <tbody id="event-table-body"></tbody>
+    </table>
+    <div class="pagination" id="pagination"></div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+    let currentPage = 1;
+    const pageSize = 30;
+    const eventTypeNames = {
+        fan_started: "风机启动",
+        fan_stopped: "风机停机",
+        sensor_reading: "振动/温度周期读数",
+        vibration_alert: "振动阈值超限",
+        temperature_alert: "温度阈值超限",
+    };
+
+    function resetFilter() {
+        document.getElementById("filter-line-code").value = "";
+        document.getElementById("filter-device-code").value = "";
+        document.getElementById("filter-start").value = "";
+        document.getElementById("filter-end").value = "";
+        loadEvents(1);
+    }
+
+    async function loadEvents(page = 1) {
+        currentPage = page;
+        const errorBox = document.getElementById("error-box");
+        showError(errorBox, "");
+        try {
+            const params = new URLSearchParams({ page, page_size: pageSize });
+            const lineCode = document.getElementById("filter-line-code").value.trim();
+            const deviceCode = document.getElementById("filter-device-code").value.trim();
+            const start = document.getElementById("filter-start").value;
+            const end = document.getElementById("filter-end").value;
+            if (lineCode) params.set("line_code", lineCode);
+            if (deviceCode) params.set("device_code", deviceCode);
+            // datetime-local 控件给出的是不带时区的本地时间字符串，转成 ISO 后浏览器 Date 按本机时区解释，
+            // toISOString() 再转成 UTC——后端按 occurred_at（UTC 存储）比较，这一步转换必须做，
+            // 否则管理员在东八区选的"9点"会被后端误当成 UTC 9点（北京时间17点）比较。
+            if (start) params.set("start_time", new Date(start).toISOString());
+            if (end) params.set("end_time", new Date(end).toISOString());
+
+            const data = await apiFetch(`/api/events?${params.toString()}`);
+            const tbody = document.getElementById("event-table-body");
+            tbody.innerHTML = "";
+            for (const e of data.items) {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${e.id}</td>
+                    <td>${e.line_code}</td>
+                    <td>${e.device_code}</td>
+                    <td>${eventTypeNames[e.event_type] || e.event_type}</td>
+                    <td>${e.value}</td>
+                    <td>${new Date(e.occurred_at).toLocaleString("zh-CN")}</td>
+                    <td>${e.is_backfill ? "回填" : "实时"}</td>`;
+                tbody.appendChild(tr);
+            }
+            renderPagination(document.getElementById("pagination"), data, loadEvents);
+        } catch (e) {
+            showError(errorBox, e.message);
+        }
+    }
+
+    loadEvents();
+</script>
+{% endblock %}

@@ -1,0 +1,36 @@
+# HTTP API 框架：提供路由与应用生命周期。
+fastapi
+# ASGI 服务进程，负责运行 FastAPI；standard 安装常用运行增强依赖。
+uvicorn[standard]
+# MQTT 客户端：连接、订阅、发布及网络循环。
+paho-mqtt
+# 数据库模型与查询层依赖：9 张表的 ORM 定义、repository 层查询均基于此（D2-D3 已启用）。
+sqlalchemy
+# PostgreSQL 驱动；binary 提供预编译实现，减少本机编译要求（D2-D3 已启用）。
+psycopg[binary]
+# 把环境变量和 .env 解析为带类型的配置对象。
+pydantic-settings
+# 每日画像定时任务 + 手动触发接口依赖（D2-D3 已启用：tasks/scheduler.py）。
+apscheduler
+# APScheduler 的 cron 触发器用 timezone="Asia/Shanghai" 解析时区，底层走标准库 zoneinfo；
+# Windows 系统与精简版 Docker 镜像（python:3.12-slim 等）都不自带 IANA 时区数据库，
+# 缺这个包会在调度器启动时报错，不是"用不用得上"的可选依赖，必须显式声明（2026-09-03 补充）。
+tzdata
+# 管理端页面模板依赖（D4-D5 已启用：Jinja2 模板 + 原生 JS + Chart.js 渲染家庭/设备/事件/画像/仪表盘/调试页面）。
+jinja2
+# FR-01 管理员密码哈希；封装 bcrypt 加盐与校验细节，比手写 hashlib 更不容易在这些地方出安全性小纰漏。
+passlib[bcrypt]
+# passlib 1.7.4 与 bcrypt 5 的 72 字节校验行为不兼容，固定在兼容主版本。
+bcrypt<4.1
+# 解析表单提交的依赖（D4-D5 已启用：FR-01 登录表单等 Jinja2 页面的 POST 表单解析）。
+python-multipart
+# 调用 DeepSeek 的 OpenAI 兼容接口，不代表本项目使用 OpenAI 模型。
+openai
+# 初始化与验证脚本读取或修改 .env。
+python-dotenv
+# 基础数据 YAML 配置解析依赖（D2-D3 已启用：config/base_data.yaml）。
+pyyaml
+# 运行离线测试；不会自动运行 verify_live.py。
+pytest
+# HTTP 客户端，供健康检查、模拟响应及 SDK 底层通信使用。
+httpx

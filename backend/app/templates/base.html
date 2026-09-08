@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}设备预测性维护平台{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/api.js"></script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+<div class="layout">
+    <div class="sidebar">
+        <div class="brand">设备预测性维护平台</div>
+        <a href="/dashboard" class="{{ 'active' if active_nav == 'dashboard' else '' }}">仪表盘</a>
+        <a href="/lines" class="{{ 'active' if active_nav == 'lines' else '' }}">产线管理</a>
+        <a href="/devices" class="{{ 'active' if active_nav == 'devices' else '' }}">设备管理</a>
+        <a href="/events" class="{{ 'active' if active_nav == 'events' else '' }}">事件日志</a>
+        <a href="/profiles" class="{{ 'active' if active_nav == 'profiles' else '' }}">画像查看</a>
+        <a href="/debug" class="{{ 'active' if active_nav == 'debug' else '' }}">预测调试</a>
+    </div>
+    <div class="main">
+        <div class="topbar">
+            <span>{{ current_username or '' }}</span>
+            <button onclick="logout()">退出登录</button>
+        </div>
+        <div class="content">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+</div>
+<script>
+    // 登出：调用登出接口清除服务端会话记录，再跳转回登录页。
+    // 全部页面共用同一个函数，不用在每个模板里重复写。
+    async function logout() {
+        try {
+            await apiFetch("/api/auth/logout", { method: "POST" });
+        } catch (e) {
+            // 即使登出接口调用失败（比如会话已经过期），也继续跳转登录页，不阻塞用户操作。
+        }
+        window.location.href = "/login";
+    }
+</script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

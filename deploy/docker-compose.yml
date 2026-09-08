@@ -1,0 +1,104 @@
+# 固定 Compose 项目名，避免目录改名导致创建另一套容器和命名卷；
+# 独立的 Compose 项目名，避免与本机其他 Compose 栈发生端口/容器名冲突。
+name: device-maintenance
+# 四个服务都在同一 Compose 网络内运行，服务间通过服务名互相访问。
+services:
+  emqx:
+    # 使用实测可拉取的明确版本，任务书中的浮动标签 5 不存在。
+    image: emqx/emqx:5.8.9
+    # 容器主机名与下面 Erlang 节点名对应。
+    hostname: iot-emqx
+    environment:
+      # EMQX 环境变量用双下划线表示配置层级；节点名格式为 名称@主机。
+      EMQX_NODE__NAME: emqx@iot-emqx
+      # 冒号问号语法让 Compose 在变量未提供或为空时直接报错，避免静默使用空密码。
+      EMQX_NODE__COOKIE: ${EMQX_NODE_COOKIE:?Run init_local.py first}
+      EMQX_NODE__DATA_DIR: /opt/emqx/data
+      EMQX_DASHBOARD__LISTENERS__HTTP__BIND: "18083"
+      # 仅用于首次初始化管理账号，真实值从本地部署 .env 注入。
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASSWORD:?Run init_local.py first}
+    ports:
+      # 端口格式为 宿主机地址:宿主机端口:容器端口；仅允许从本机访问。
+      # 宿主机端口 1884/18084：避开常见 EMQX 默认端口占用，已在本机验证可用。
+      - "127.0.0.1:1884:1883"
+      - "127.0.0.1:18084:18083"
+    volumes:
+      # 相对路径以此 Compose 文件目录为基准；ro 表示容器只能读取挂载文件。
+      - ./emqx/emqx.conf:/opt/emqx/etc/emqx.conf:ro
+      - ./emqx/auth-users.csv:/opt/emqx/etc/auth-users.csv:ro
+      # 命名卷保留认证与运行数据；重建容器不会自动删除卷。
+      - emqx-data:/opt/emqx/data
+      - emqx-log:/opt/emqx/log
+    healthcheck:
+      # 检查 Broker 自带状态接口；健康不代表 DeepSeek 或完整业务链路已通过。
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:18083/status"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+    restart: unless-stopped
+  # 独立数据库容器，当前只验证启动，不建业务表。
+  postgres:
+    image: postgres:16
+    environment:
+      # 这些初始数据库参数只在数据目录为空时用于初始化。
+      POSTGRES_USER: iot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run init_local.py first}
+      POSTGRES_DB: iot_platform
+    ports:
+      # 宿主机端口 5544：避开常见 PostgreSQL 默认端口占用，已在本机验证可用。
+      - "127.0.0.1:5544:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready 检查数据库是否接受连接，不等于验证业务查询或全部权限。
+      test: ["CMD-SHELL", "pg_isready -U iot -d iot_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+  platform:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    hostname: iot-platform
+    env_file:
+      - ../backend/.env
+    ports:
+      # 8001 仅绑定本机，管理端与调试接口不对公网暴露。
+      - "127.0.0.1:8001:8000"
+    volumes:
+      # 原始报文归档与运行日志放数据卷，容器重建不丢历史数据。
+      - platform-raw-data:/app/data/raw
+      - platform-logs:/app/logs
+    depends_on:
+      emqx:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # 用 httpx（已在 requirements.txt）代替 curl，避免精简镜像额外装包。
+      # 这里只验证 HTTP 进程存活，不代表数据库、MQTT 和大模型均已就绪。
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://127.0.0.1:8000/health', timeout=3).raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+  simulator:
+    build:
+      context: ../simulator
+      dockerfile: Dockerfile
+    hostname: iot-simulator
+    env_file:
+      - ../simulator/.env
+    depends_on:
+      platform:
+        condition: service_healthy
+    restart: unless-stopped
+# 声明 Compose 管理的命名卷；清理时需注意删除卷会删除持久化数据。
+volumes:
+  emqx-data:
+  emqx-log:
+  postgres-data:
+  platform-raw-data:
+  platform-logs:

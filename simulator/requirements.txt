@@ -1,0 +1,7 @@
+# 独立模拟网关依赖，不依赖 backend 的完整依赖清单（simulator/ 不 import backend 代码）。
+# MQTT 客户端：连接 Broker、发布回填/实时事件、订阅并打印预测。
+paho-mqtt
+# 调用平台 REST 接口完成家庭/设备幂等注册。
+httpx
+# 解析 simulator/.env 配置文件。
+python-dotenv

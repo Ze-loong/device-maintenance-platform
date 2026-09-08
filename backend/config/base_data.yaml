@@ -1,0 +1,73 @@
+# 基础数据配置（对应 FR-14 最简实现：设备类型/位置/事件类型/画像维度映射等业务规则放这里，不写死在代码里）。
+# 本文件由 backend/app/core/base_data.py 在启动时加载并做结构校验；改这里不用改代码、不用重新部署镜像。
+
+# 设备类型清单：device.device_type 与 MQTT 上行 UplinkEvent.device_type 的合法取值。
+# 目前只在这里做"文档级"枚举，数据库层与 Pydantic 层都不做强校验，新增设备类型只需要在这里加一行。
+device_types:
+  - code: vibration
+    name: 振动传感器
+  - code: temperature
+    name: 温度传感器
+  - code: speed
+    name: 转速传感器
+
+# 安装位置清单：device.location 与 UplinkEvent.location 的合法取值。
+locations:
+  - code: workshop_a
+    name: 车间A
+  - code: workshop_b
+    name: 车间B
+  - code: cooling_tower
+    name: 冷却塔
+  - code: warehouse
+    name: 仓库
+  - code: outdoor
+    name: 室外/屋顶
+
+# 事件类型清单：与 UplinkEvent.event_type 的五选一 Literal 保持一致。
+# 这里列出来是给运营/管理端展示中文名用，不是 Pydantic 校验的数据来源
+# （Pydantic 用 Literal 硬编码这五个值，因为它们是协议层面固定取值，不属于"业务规则可配置"的范畴）。
+event_types:
+  - code: fan_started
+    name: 风机启动
+  - code: fan_stopped
+    name: 风机停机
+  - code: sensor_reading
+    name: 振动/温度周期读数
+  - code: vibration_alert
+    name: 振动阈值超限
+  - code: temperature_alert
+    name: 温度阈值超限
+
+# 不同安装位置的风机工况不同，同一启停或周期读数事件命中的画像维度侧重也不同：
+# 车间风机侧重启停冲击和振动，冷却塔侧重温度，仓库风机侧重间歇启停，室外风机更可能落入异常记录兜底。
+# key 格式："{location}:{event_type}"，value 是命中的画像维度列表（可以命中多个维度）。
+# 振动/温度超限事件本身已明确指标类型，由代码直接命中固定维度，不进入本表。
+# 覆盖不到的组合，兜底落到 dimension_fallback 指定的维度（"异响/异常记录"）。
+dimension_mapping:
+  "workshop_a:fan_started": ["运行时长规律", "启停冲击模式"]
+  "workshop_a:fan_stopped": ["启停冲击模式"]
+  "workshop_a:sensor_reading": ["振动特征"]
+  "workshop_b:fan_started": ["运行时长规律", "启停冲击模式"]
+  "workshop_b:fan_stopped": ["启停冲击模式"]
+  "workshop_b:sensor_reading": ["振动特征"]
+  "cooling_tower:fan_started": ["运行时长规律"]
+  "cooling_tower:fan_stopped": ["运行时长规律"]
+  "cooling_tower:sensor_reading": ["温度趋势"]
+  "warehouse:fan_started": ["启停冲击模式"]
+  "warehouse:fan_stopped": ["启停冲击模式", "运行时长规律"]
+  "outdoor:fan_started": ["运行时长规律", "启停冲击模式"]
+  "outdoor:fan_stopped": ["运行时长规律"]
+# 映射表覆盖不到的 location:event_type 组合，兜底命中此维度，保证检索永远有结果可返回（哪怕是"异响/异常记录"）。
+dimension_fallback: ["异响/异常记录"]
+
+# 置信度五步算法里的时间容差，单位分钟。放这里而不是硬编码在 service 层，
+# 方便调试演示效果时临时调整：收紧会让"高"档更难触发，放宽更容易在几天内演示出"高"置信度。
+confidence_time_tolerance_minutes: 30
+
+# 置信度算法检索历史画像分段的时间窗口，单位天。
+confidence_lookback_days: 7
+
+# 画像生成（profile_service）超量抽样阈值：一个产线一天的事件数超过这个值时，
+# 按时间顺序等间隔抽样到这个条数再传给大模型，避免 token 消耗过大，同时保证覆盖全天各时段。
+profile_max_sample_events: 200

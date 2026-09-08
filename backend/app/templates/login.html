@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>登录 - 设备预测性维护平台</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/api.js"></script>
+    <style>
+        body { display: flex; align-items: center; justify-content: center; height: 100vh; }
+        .login-box { background: #fff; padding: 32px 36px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); width: 320px; }
+        .login-box h1 { text-align: center; font-size: 16px; margin-bottom: 20px; }
+        .login-box .form-row { flex-direction: column; align-items: stretch; }
+        .login-box input { width: 100%; margin-bottom: 12px; padding: 8px; }
+        .login-box button { width: 100%; padding: 8px; }
+    </style>
+</head>
+<body>
+<div class="login-box">
+    <h1>设备预测性维护平台 · 管理员登录</h1>
+    <div id="error-box" class="error-box" style="display:none;"></div>
+    <form id="login-form">
+        <div class="form-row">
+            <input type="text" id="username" placeholder="用户名" required autofocus>
+            <input type="password" id="password" placeholder="密码" required>
+            <button type="submit" class="primary">登录</button>
+        </div>
+    </form>
+</div>
+<script>
+    // 注意：这里故意不用 static/js/api.js 里的 apiFetch，直接用原生 fetch——
+    // apiFetch 对 401 响应统一处理成"会话过期，跳转登录页"，而登录接口本身在
+    // "用户名或密码错误"时也会返回 401（这是该场景下语义最合适的状态码），
+    // 如果用 apiFetch 调用登录接口，密码输错时会被误判成"会话过期"再跳转回登录页，
+    // 页面表现为"错误提示一闪而过/根本看不到"，这是登录页这个特殊场景必须单独处理的原因，
+    // 不是遗漏了复用公共工具。
+    document.getElementById("login-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const errorBox = document.getElementById("error-box");
+        showError(errorBox, "");
+        try {
+            const resp = await fetch("/api/auth/login", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    username: document.getElementById("username").value,
+                    password: document.getElementById("password").value,
+                }),
+            });
+            const body = await resp.json().catch(() => null);
+            if (!resp.ok) {
+                throw new Error((body && body.detail) ? body.detail : "登录失败，请检查用户名或密码");
+            }
+            window.location.href = "/dashboard";
+        } catch (e) {
+            showError(errorBox, e.message);
+        }
+    });
+</script>
+</body>
+</html>
